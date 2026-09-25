@@ -412,34 +412,84 @@ export function StackedBars({
 }): ReactElement {
   const width = 860;
   const pad = { l: 64, r: 12, t: 10, b: 26 };
-  const totals = years.map((_, i) => series.reduce((acc, s) => acc + Math.max(0, s.values[i] ?? 0), 0));
+
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  const totals = years.map((_, i) =>
+    series.reduce(
+      (acc, s) => acc + Math.max(0, s.values[i] ?? 0),
+      0,
+    ),
+  );
+
   const max = Math.max(...totals, 1);
   const bw = (width - pad.l - pad.r) / years.length;
-  const fmt = format ?? ((v: number) => `${Math.round(v / 1000)}k`);
+
+  const fmt =
+    format ??
+    ((v: number) => `${Math.round(v / 1000)}k`);
+
   const ticks = [0, max / 2, max];
+
+  const hoveredRows: TooltipRow[] =
+    hoveredIndex === null
+      ? []
+      : series.map((s) => ({
+          name: s.name,
+          value: s.values[hoveredIndex] ?? 0,
+          color: s.color,
+        }));
+
   return (
     <div>
       <div className="chart-wrap">
-        <svg viewBox={`0 0 ${width} ${height}`} width="100%" style={{ display: 'block' }}>
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          width="100%"
+          style={{ display: 'block' }}
+          onMouseLeave={() => setHoveredIndex(null)}
+        >
           {ticks.map((t) => {
-            const y = height - pad.b - (t / max) * (height - pad.t - pad.b);
+            const y =
+              height -
+              pad.b -
+              (t / max) * (height - pad.t - pad.b);
+
             return (
               <g key={t}>
-                <line x1={pad.l} x2={width - pad.r} y1={y} y2={y} stroke="#2a3644" strokeDasharray="3 4" />
-                <text x={pad.l - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#93a3b5">
+                <line
+                  x1={pad.l}
+                  x2={width - pad.r}
+                  y1={y}
+                  y2={y}
+                  stroke="#2a3644"
+                  strokeDasharray="3 4"
+                />
+                <text
+                  x={pad.l - 8}
+                  y={y + 4}
+                  textAnchor="end"
+                  fontSize="11"
+                  fill="#93a3b5"
+                >
                   {fmt(t)}
                 </text>
               </g>
             );
           })}
+
           {years.map((yr, i) => {
             let acc = 0;
             const x = pad.l + i * bw;
+
             return (
               <g key={yr}>
                 {series.map((s) => {
                   const v = Math.max(0, s.values[i] ?? 0);
-                  const h = (v / max) * (height - pad.t - pad.b);
+                  const h =
+                    (v / max) *
+                    (height - pad.t - pad.b);
+
                   const rect = (
                     <rect
                       key={s.name}
@@ -450,23 +500,89 @@ export function StackedBars({
                       fill={s.color}
                     />
                   );
+
                   acc += h;
                   return rect;
                 })}
+
                 {i % Math.ceil(years.length / 12) === 0 ? (
-                  <text x={x + bw / 2} y={height - 8} textAnchor="middle" fontSize="10" fill="#93a3b5">
+                  <text
+                    x={x + bw / 2}
+                    y={height - 8}
+                    textAnchor="middle"
+                    fontSize="10"
+                    fill="#93a3b5"
+                  >
                     {yr}
                   </text>
                 ) : null}
               </g>
             );
           })}
+
+          {hoveredIndex !== null ? (
+            <line
+              x1={
+                pad.l +
+                hoveredIndex * bw +
+                bw / 2
+              }
+              x2={
+                pad.l +
+                hoveredIndex * bw +
+                bw / 2
+              }
+              y1={pad.t}
+              y2={height - pad.b}
+              stroke="#93a3b5"
+              strokeDasharray="3 3"
+              opacity="0.45"
+            />
+          ) : null}
+
+          {years.map((yr, i) => (
+            <rect
+              key={`hover-${yr}`}
+              x={pad.l + i * bw}
+              y={pad.t}
+              width={bw}
+              height={height - pad.t - pad.b}
+              fill="transparent"
+              onMouseEnter={() => setHoveredIndex(i)}
+              onMouseMove={() => setHoveredIndex(i)}
+            />
+          ))}
+
+          {hoveredIndex !== null ? (
+            <ChartTooltip
+              x={
+                pad.l +
+                hoveredIndex * bw +
+                bw +
+                8
+              }
+              y={pad.t + 8}
+              width={240}
+              year={years[hoveredIndex]}
+              rows={hoveredRows}
+              valueFormatter={(v) =>
+                v.toLocaleString('en-EE', {
+                  maximumFractionDigits: 0,
+                })
+              }
+              basis="nominal"
+            />
+          ) : null}
         </svg>
       </div>
+
       <div className="legend">
         {series.map((s) => (
           <span key={s.name}>
-            <span className="dot" style={{ background: s.color }} />
+            <span
+              className="dot"
+              style={{ background: s.color }}
+            />
             {s.name}
           </span>
         ))}
