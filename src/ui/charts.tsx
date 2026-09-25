@@ -30,6 +30,36 @@ function niceTicks(min: number, max: number, count = 5): number[] {
   return out;
 }
 
+type TooltipRow = {
+  name: string;
+  value: number;
+  color: string;
+};
+
+function uniqueSortedYears(values: number[]): number[] {
+  return [...new Set(values)].sort((a, b) => a - b);
+}
+
+function tooltipXBounds(
+  years: number[],
+  sx: (x: number) => number,
+  index: number,
+): { left: number; right: number } {
+  const current = sx(years[index]);
+
+  const left =
+    index === 0
+      ? current
+      : (sx(years[index - 1]) + current) / 2;
+
+  const right =
+    index === years.length - 1
+      ? current
+      : (current + sx(years[index + 1])) / 2;
+
+  return { left, right };
+}
+
 export function LineChart(props: LineChartProps): ReactElement {
   const { series, height = 260, yFormat, reference, className } = props;
   const width = 860;
