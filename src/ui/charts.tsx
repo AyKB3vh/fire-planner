@@ -60,6 +60,83 @@ function tooltipXBounds(
   return { left, right };
 }
 
+function ChartTooltip({
+  x,
+  y,
+  width,
+  year,
+  rows,
+  valueFormatter,
+  basis,
+}: {
+  x: number;
+  y: number;
+  width: number;
+  year: number;
+  rows: TooltipRow[];
+  valueFormatter: (value: number) => string;
+  basis: string;
+}): ReactElement {
+  const rowHeight = 17;
+  const headerHeight = 22;
+  const height = headerHeight + rows.length * rowHeight + 10;
+
+  const boxX = Math.max(4, Math.min(x, 860 - width - 4));
+  const boxY = Math.max(4, y);
+
+  return (
+    <g pointerEvents="none">
+      <rect
+        x={boxX}
+        y={boxY}
+        width={width}
+        height={height}
+        rx="6"
+        fill="#171e27"
+        stroke="#4b5d70"
+      />
+
+      <text
+        x={boxX + 10}
+        y={boxY + 16}
+        fontSize="11"
+        fontWeight="700"
+        fill="#e7edf4"
+      >
+        {year} · {basis}
+      </text>
+
+      {rows.map((row, i) => (
+        <g key={row.name}>
+          <circle
+            cx={boxX + 11}
+            cy={boxY + headerHeight + i * rowHeight + 1}
+            r="3"
+            fill={row.color}
+          />
+          <text
+            x={boxX + 19}
+            y={boxY + headerHeight + i * rowHeight + 5}
+            fontSize="10.5"
+            fill="#c7d0da"
+          >
+            {row.name}
+          </text>
+          <text
+            x={boxX + width - 8}
+            y={boxY + headerHeight + i * rowHeight + 5}
+            textAnchor="end"
+            fontSize="10.5"
+            fill="#e7edf4"
+          >
+            {valueFormatter(row.value)}
+          </text>
+        </g>
+      ))}
+    </g>
+  );
+}
+
 export function LineChart(props: LineChartProps): ReactElement {
   const { series, height = 260, yFormat, reference, className } = props;
   const width = 860;
