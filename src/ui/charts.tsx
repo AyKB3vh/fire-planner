@@ -141,34 +141,67 @@ export function LineChart(props: LineChartProps): ReactElement {
   const { series, height = 260, yFormat, reference, className } = props;
   const width = 860;
   const pad = { l: 64, r: 14, t: 12, b: 30 };
+
+  const [hoveredYear, setHoveredYear] = useState<number | null>(null);
+
   const all = series.flatMap((s) => s.points);
+
   if (all.length === 0) {
     return <div className="muted">No data.</div>;
   }
+
   const xs = all.map((p) => p.x);
   const ys = all.map((p) => p.y);
+
   let xMin = Math.min(...xs);
   let xMax = Math.max(...xs);
   let yMin = Math.min(...ys, reference ? reference.y : 0);
   let yMax = Math.max(...ys, reference ? reference.y : 0);
+
   if (xMin === xMax) xMax = xMin + 1;
+
   const yPad = (yMax - yMin) * 0.06 || 1;
   yMin -= yPad;
   yMax += yPad;
 
   const sx = (x: number): number =>
     pad.l + ((x - xMin) / (xMax - xMin)) * (width - pad.l - pad.r);
+
   const sy = (y: number): number =>
-    height - pad.b - ((y - yMin) / (yMax - yMin)) * (height - pad.t - pad.b);
+    height -
+    pad.b -
+    ((y - yMin) / (yMax - yMin)) * (height - pad.t - pad.b);
 
   const yTicks = niceTicks(yMin, yMax, 5);
   const xTicks = niceTicks(xMin, xMax, 7);
-  const fmt = yFormat ?? ((v: number) => v.toLocaleString('en-EE', { maximumFractionDigits: 0 }));
+
+  const fmt =
+    yFormat ??
+    ((v: number) =>
+      v.toLocaleString('en-EE', { maximumFractionDigits: 0 }));
+
+  const years = uniqueSortedYears(xs);
+  const hoveredIndex =
+    hoveredYear === null ? -1 : years.indexOf(hoveredYear);
+
+  const hoveredRows: TooltipRow[] =
+    hoveredYear === null
+      ? []
+      : series.map((s) => ({
+          name: s.name,
+          value: s.points.find((p) => p.x === hoveredYear)?.y ?? 0,
+          color: s.color,
+        }));
 
   return (
     <div className={className}>
       <div className="chart-wrap">
-        <svg viewBox={`0 0 ${width} ${height}`} width="100%" style={{ display: 'block' }}>
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          width="100%"
+          style={{ display: 'block' }}
+          onMouseLeave={() => setHoveredYear(null)}
+        >
           {yTicks.map((t) => (
             <g key={`y${t}`}>
               <line
@@ -179,11 +212,18 @@ export function LineChart(props: LineChartProps): ReactElement {
                 stroke="#2a3644"
                 strokeDasharray="3 4"
               />
-              <text x={pad.l - 8} y={sy(t) + 4} textAnchor="end" fontSize="11" fill="#93a3b5">
+              <text
+                x={pad.l - 8}
+                y={sy(t) + 4}
+                textAnchor="end"
+                fontSize="11"
+                fill="#93a3b5"
+              >
                 {fmt(t)}
               </text>
             </g>
           ))}
+
           {xTicks
             .filter((t) => t >= xMin && t <= xMax)
             .map((t) => (
@@ -198,6 +238,7 @@ export function LineChart(props: LineChartProps): ReactElement {
                 {t}
               </text>
             ))}
+
           {reference ? (
             <g>
               <line
@@ -219,17 +260,62 @@ export function LineChart(props: LineChartProps): ReactElement {
               </text>
             </g>
           ) : null}
+
           {series.map((s) => (
             <polyline
               key={s.name}
               fill="none"
               stroke={s.color}
               strokeWidth="2"
-              points={s.points.map((p) => `${sx(p.x)},${sy(p.y)}`).join(' ')}
+              points={s.points
+                .map((p) => `${sx(p.x)},${sy(p.y)}`)
+                .join(' ')}
             />
           ))}
+
+          {hoveredYear !== null && hoveredIndex >= 0 ? (
+            <line
+              x1={sx(hoveredYear)}
+              x2={sx(hoveredYear)}
+              y1={pad.t}
+              y2={height - pad.b}
+              stroke="#93a3b5"
+              strokeDasharray="3 3"
+              opacity="0.45"
+            />
+          ) : null}
+
+          {years.map((year, i) => {
+            const bounds = tooltipXBounds(years, sx, i);
+
+            return (
+              <rect
+                key={`hover-${year}`}
+                x={bounds.left}
+                y={pad.t}
+                width={Math.max(1, bounds.right - bounds.left)}
+                height={height - pad.t - pad.b}
+                fill="transparent"
+                onMouseEnter={() => setHoveredYear(year)}
+                onMouseMove={() => setHoveredYear(year)}
+              />
+            );
+          })}
+
+          {hoveredYear !== null && hoveredRows.length > 0 ? (
+            <ChartTooltip
+              x={sx(hoveredYear) + 12}
+              y={pad.t + 8}
+              width={230}
+              year={hoveredYear}
+              rows={hoveredRows}
+              valueFormatter={fmt}
+              basis="nominal"
+            />
+          ) : null}
         </svg>
       </div>
+
       <div className="legend">
         {series.map((s) => (
           <span key={s.name}>
