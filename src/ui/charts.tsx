@@ -1,6 +1,6 @@
 /** SVG chart primitives (no external libraries). */
 
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 
 export interface Series {
   name: string;
