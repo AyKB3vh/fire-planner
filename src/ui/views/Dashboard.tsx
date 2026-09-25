@@ -181,46 +181,46 @@ export function DashboardView(): ReactElement {
       <Card title="Funding sources of household spending — central diagnostic path">
         {quick?.policy ? (
           <StackedBars
-            years={years.filter((_, i) => i % 3 === 0 || i === years.length - 1).map((y) => y.year)}
-            series={[
-              {
-                name: 'State pension',
-                color: '#7ee0a3',
-                values: years.filter((_, i) => i % 3 === 0 || i === years.length - 1)
-                  .map((y) => y.inflows.statePensionNet),
-              },
-              {
-                name: 'OÜ remuneration',
-                color: '#4da3ff',
-                values: years.filter((_, i) => i % 3 === 0 || i === years.length - 1)
-                  .map((y) => y.inflows.remunerationNet),
-              },
-              {
-                name: 'Pillar fixed-term payments',
-                color: '#c792ea',
-                values: years.filter((_, i) => i % 3 === 0 || i === years.length - 1)
-                  .map((y) => y.inflows.pillarIIPayment + y.inflows.pillarIIIPayment),
-              },
-              {
-                name: 'Shareholder-loan repayment',
-                color: '#f4c76b',
-                values: years.filter((_, i) => i % 3 === 0 || i === years.length - 1)
-                  .map((y) => y.inflows.loanRepayment),
-              },
-              {
-                name: 'OÜ distribution (net)',
-                color: '#ff9eb5',
-                values: years.filter((_, i) => i % 3 === 0 || i === years.length - 1)
-                  .map((y) => y.inflows.distributionNet),
-              },
-              {
-                name: 'Own cash above reserve',
-                color: '#88c0d0',
-                values: years.filter((_, i) => i % 3 === 0 || i === years.length - 1)
-                  .map((y) => y.inflows.personalCashUsedAboveReserve + y.inflows.emergencyReserveUsed),
-              },
-            ]}
-          />
+  years={years.map((y) => y.year)}
+  series={[
+    {
+      name: 'State pension',
+      color: '#7ee0a3',
+      values: years.map((y) => y.inflows.statePensionNet),
+    },
+    {
+      name: 'OÜ remuneration',
+      color: '#4da3ff',
+      values: years.map((y) => y.inflows.remunerationNet),
+    },
+    {
+      name: 'Pillar fixed-term payments',
+      color: '#c792ea',
+      values: years.map(
+        (y) => y.inflows.pillarIIPayment + y.inflows.pillarIIIPayment,
+      ),
+    },
+    {
+      name: 'Shareholder-loan repayment',
+      color: '#f4c76b',
+      values: years.map((y) => y.inflows.loanRepayment),
+    },
+    {
+      name: 'OÜ distribution (net)',
+      color: '#ff9eb5',
+      values: years.map((y) => y.inflows.distributionNet),
+    },
+    {
+      name: 'Own cash above reserve',
+      color: '#88c0d0',
+      values: years.map(
+        (y) =>
+          y.inflows.personalCashUsedAboveReserve +
+          y.inflows.emergencyReserveUsed,
+      ),
+    },
+  ]}
+/>
         ) : (
           <div className="muted">No projection.</div>
         )}
