@@ -97,16 +97,19 @@ export function recommendedDuration(age: number, overrides: PillarOverrides): nu
   return Math.max(5, 83 - age);
 }
 
-/**
- * Fixed-term payment for the current contract year (start-of-year, §7.5):
- *   payment = balance at start of year ÷ remaining years in term
- * The contract exhausts exactly at term end because remaining-years counts
- * down to 1 (final payment = full remaining balance).
- */
-export function fixedTermPayment(balance: number, remainingYears: number): number {
-  if (remainingYears <= 0) return 0;
-  if (remainingYears === 1) return balance;
-  return balance / remainingYears;
+/** Synthetic pension-unit normalisation used by the projection model. */
+export const NORMALISED_PILLAR_UNITS = 1_000_000;
+
+/** Units redeemed for one payment from a fixed-term pension contract. */
+export function unitsToRedeem(unitsHeld: number, paymentsRemaining: number): number {
+  if (paymentsRemaining <= 0 || unitsHeld <= 0) return 0;
+  return unitsHeld / paymentsRemaining;
+}
+
+/** EUR payment from redeemed pension units at the current NAV. */
+export function paymentFromUnits(unitsRedeemed: number, nav: number): number {
+  if (unitsRedeemed <= 0 || nav <= 0) return 0;
+  return unitsRedeemed * nav;
 }
 
 export interface PillarContract {
