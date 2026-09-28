@@ -311,6 +311,33 @@ describe('retirement surplus rule', () => {
     expect(y0.realisedSpending).toBeCloseTo(75_000, 2);
   });
 
+  it('caps extra spending at 50% of the nominal spending target when the desired 25% exceeds the cap', () => {
+    const ctx = ctxFor({
+      adults: [adult({ id: 'a', birthYear: 1975 })], // III access 2030
+      startYear: 2030,
+      personalCash: 0,
+      ouCash: 0,
+      ouInvestments: 50_000,
+      shareholderLoan: 0,
+      iiPillar: 0,
+      iiiPillar: 200_000 * 28,
+      minimumCashReserve: 0,
+      spending: 50_000,
+      mutateAssumptions: (a) => {
+        a.spendingInflation = 0;
+      },
+    });
+    const r = runPolicy(ctx, policyFor(ctx, 'LoanFirst'), central(ctx));
+    const y0 = r.years[0];
+
+    // Income €200k, target €50k -> surplus €150k.
+    // Desired extra spending is €37.5k, but the cap is €25k.
+    expect(y0.inflows.pillarIIIPayment).toBeCloseTo(200_000, 2);
+    expect(y0.extraSpending).toBeCloseTo(25_000, 2);
+    expect(y0.inflows.reinvestment).toBeCloseTo(125_000, 2);
+    expect(y0.realisedSpending).toBeCloseTo(75_000, 2);
+  });
+
   it('ranked wealth adds back extra spending at the consumption valuation rate', () => {
     const ctx = surplusCtx();
     const r = runPolicy(ctx, policyFor(ctx, 'LoanFirst'), central(ctx));
