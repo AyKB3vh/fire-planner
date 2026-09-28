@@ -489,7 +489,7 @@ describe('pillar mechanics', () => {
     expect(y0.end.iiiPillar).toBeCloseTo((750_000 * 27 / 28) * 1.10, 2);
   });
 
-  it('funded pension contracts make 12 payments per year at the same NAV when returns are zero', () => {
+  it('funded pension contracts make 12 monthly payments per model year at the same NAV when returns are zero', () => {
     const ctx = ctxFor({
       adults: [adult({ id: 'a', birthYear: 1975 })],
       startYear: 2030,
@@ -497,10 +497,10 @@ describe('pillar mechanics', () => {
       ouCash: 0,
       ouInvestments: 0,
       shareholderLoan: 0,
-      iiPillar: 1_000_000,
-      iiiPillar: 1_000_000,
+      iiPillar: 1_000_000 * 28,
+      iiiPillar: 1_000_000 * 28,
       minimumCashReserve: 0,
-      spending: 1_000_000,
+      spending: 1_000_000_000,
       mutateAssumptions: (a) => {
         a.spendingInflation = 0;
         a.returns.ou.geometricReturn = 0;
@@ -514,11 +514,11 @@ describe('pillar mechanics', () => {
     const r = runPolicy(ctx, p, central(ctx));
     const y0 = r.years[0];
 
-    // The 28-year contract is 336 monthly payments. With €1/unit NAV,
-    // each month redeems 1,000,000 / 336 units and pays €2,976.19.
-    const expectedMonthly = 1_000_000 / (28 * 12);
-    expect(y0.inflows.pillarIIPayment).toBeCloseTo(expectedMonthly * 12, 2);
-    expect(y0.inflows.pillarIIIPayment).toBeCloseTo(expectedMonthly * 12, 2);
+    // 28-year contract = 336 monthly payments. At €1/unit NAV each
+    // monthly payment is 1,000,000 / 336; twelve payments = 1/28 of balance.
+    const expectedAnnual = 1_000_000 * 12 / (28 * 12);
+    expect(y0.inflows.pillarIIPayment).toBeCloseTo(expectedAnnual, 2);
+    expect(y0.inflows.pillarIIIPayment).toBeCloseTo(expectedAnnual, 2);
   });
 
   it('monthly unit redemption exhausts the contract after the intended duration', () => {
