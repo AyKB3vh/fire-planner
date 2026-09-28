@@ -5,7 +5,7 @@ import { useState, type ReactElement } from 'react';
 export interface Series {
   name: string;
   color: string;
-  points: { x: number; y: number }[];
+  points: { x: number; y: number; detail?: string }[];
 }
 
 interface LineChartProps {
@@ -34,6 +34,7 @@ type TooltipRow = {
   name: string;
   value: number;
   color: string;
+  detail?: string;
 };
 
 function uniqueSortedYears(values: number[]): number[] {
@@ -120,7 +121,7 @@ function ChartTooltip({
             fontSize="10.5"
             fill="#c7d0da"
           >
-            {row.name}
+            {row.detail ? `${row.name} · ${row.detail}` : row.name}
           </text>
           <text
             x={boxX + width - 8}
@@ -200,6 +201,7 @@ export function LineChart(props: LineChartProps): ReactElement {
           name: s.name,
           value: s.points.find((p) => p.x === hoveredYear)?.y ?? 0,
           color: s.color,
+          detail: s.points.find((p) => p.x === hoveredYear)?.detail,
         }));
 
   return (
