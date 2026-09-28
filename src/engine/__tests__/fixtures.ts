@@ -1,6 +1,6 @@
 /** Shared fixtures for engine tests. */
 
-import type { Adult, Assumptions, Scenario } from '../../types';
+import type { Adult, Assumptions, PillarOverrides, Scenario } from '../../types';
 import { createDefaultScenario } from '../../defaults';
 import { createDefaultRegistry } from '../../rules/registry';
 import type { ProjectionContext } from '../projection';
@@ -29,6 +29,7 @@ export interface TestCtxOptions {
   iiiPillar?: number;
   minimumCashReserve?: number;
   spending?: number;
+  pillarOverrides?: Partial<PillarOverrides>;
   mutateAssumptions?: (a: Assumptions) => void;
 }
 
@@ -46,6 +47,7 @@ export function scenarioFor(opts: TestCtxOptions = {}): Scenario {
   if (opts.minimumCashReserve !== undefined) s.startState.minimumCashReserve = opts.minimumCashReserve;
   if (opts.spending !== undefined) s.assumptions.spending.targetAnnualTodayEUR = opts.spending;
   if (opts.adults) s.household.adults = opts.adults;
+  if (opts.pillarOverrides) s.pillarOverrides = { ...s.pillarOverrides, ...opts.pillarOverrides };
   if (opts.mutateAssumptions) opts.mutateAssumptions(s.assumptions);
   return s;
 }
