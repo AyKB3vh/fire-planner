@@ -41,7 +41,13 @@ import {
   type TaxYearParams,
 } from './tax';
 import { healthcareYear, type HCOpts } from './healthcare';
-import { pillarAccess, recommendedDuration, fixedTermPayment } from './pillars';
+import {
+  pillarAccess,
+  recommendedDuration,
+  NORMALISED_PILLAR_UNITS,
+  unitsToRedeem,
+  paymentFromUnits,
+} from './pillars';
 import { resolvePensionAge, statePensionStartYear } from './pension';
 import { reachedPensionAgeInOrBefore, getRuleValue } from '../rules/registry';
 
@@ -256,6 +262,16 @@ export function runPolicy(
   let iiRemaining = events.iiRemainingAtStart;
   let iiiRemaining = events.iiiRemainingAtStart;
 
+  // Funded-pension contract state. Before contract start, balances remain
+  // ordinary EUR balances. At contract start, each pillar is normalised to
+  // synthetic units with a NAV preserving the balance exactly.
+  let iiUnits = 0;
+  let iiiUnits = 0;
+  let iiNav = 0;
+  let iiiNav = 0;
+  let iiContractInitialised = false;
+  let iiiContractInitialised = false;
+
   // --- accumulators ---
   const years: YearResult[] = [];
   let lifetimeTax = 0;
@@ -398,27 +414,33 @@ export function runPolicy(
     }
 
     /* STEP 3b — pillar fixed-term payments (start of year, 0% tax) ------- */
+    if (!iiiContractInitialised && year >= events.iiiContractStart && bal.iii > 0) {
+      iiiUnits = NORMALISED_PILLAR_UNITS;
+      iiiNav = bal.iii / iiiUnits;
+      iiiContractInitialised = true;
+    }
+    if (!iiContractInitialised && year >= events.iiContractStart && bal.ii > 0) {
+      iiUnits = NORMALISED_PILLAR_UNITS;
+      iiNav = bal.ii / iiUnits;
+      iiContractInitialised = true;
+    }
     let pillarIIIPayment = 0;
     let pillarIIPayment = 0;
-    if (
-      year >= events.iiiContractStart &&
-      iiiRemaining > 0 &&
-      bal.iii > 0
-    ) {
-      const pay = round2(fixedTermPayment(bal.iii, iiiRemaining));
-      bal.iii = round2(bal.iii - pay);
+    if (iiiContractInitialised && iiiRemaining > 0 && iiiUnits > 0) {
+      const unitsRedeemed = unitsToRedeem(iiiUnits, iiiRemaining);
+      const pay = round2(paymentFromUnits(unitsRedeemed, iiiNav));
+      iiiUnits -= unitsRedeemed;
       pillarIIIPayment = pay;
       iiiRemaining -= 1;
+      bal.iii = round2(iiiUnits * iiiNav);
     }
-    if (
-      year >= events.iiContractStart &&
-      iiRemaining > 0 &&
-      bal.ii > 0
-    ) {
-      const pay = round2(fixedTermPayment(bal.ii, iiRemaining));
-      bal.ii = round2(bal.ii - pay);
+    if (iiContractInitialised && iiRemaining > 0 && iiUnits > 0) {
+      const unitsRedeemed = unitsToRedeem(iiUnits, iiRemaining);
+      const pay = round2(paymentFromUnits(unitsRedeemed, iiNav));
+      iiUnits -= unitsRedeemed;
       pillarIIPayment = pay;
       iiRemaining -= 1;
+      bal.ii = round2(iiUnits * iiNav);
     }
     const pillarPayments = round2(pillarIIIPayment + pillarIIPayment);
     const contractInflows = round2(
@@ -652,17 +674,34 @@ export function runPolicy(
     const ouCashBeforeReturn = bal.ouCash;
 
     bal.ouInv = round2(bal.ouInv * (1 + rOu));
-    bal.ii = round2(bal.ii * (1 + rIi));
-    bal.iii = round2(bal.iii * (1 + rIii));
+    if (iiContractInitialised) {
+      iiNav *= 1 + rIi;
+      bal.ii = round2(iiUnits * iiNav);
+    } else {
+      bal.ii = round2(bal.ii * (1 + rIi));
+    }
+    if (iiiContractInitialised) {
+      iiiNav *= 1 + rIii;
+      bal.iii = round2(iiiUnits * iiiNav);
+    } else {
+      bal.iii = round2(bal.iii * (1 + rIii));
+    }
     bal.cash = round2(bal.cash * (1 + cashRate));
     bal.ouCash = round2(bal.ouCash * (1 + cashRate));
 
-    // II contributions from remuneration are credited at year end (default 0%)
+    // II contributions from remuneration are credited at year end. Before the
+    // contract starts they increase the EUR balance directly; after contract
+    // start they purchase additional units at the prevailing NAV.
     let iiContributions = 0;
     for (const a of adults) {
       iiContributions = round2(iiContributions + payrollByAdult[a.id].employeeII * paidFraction);
     }
-    bal.ii = round2(bal.ii + iiContributions);
+    if (iiContractInitialised && iiContributions > 0 && iiNav > 0) {
+      iiUnits += iiContributions / iiNav;
+      bal.ii = round2(iiUnits * iiNav);
+    } else {
+      bal.ii = round2(bal.ii + iiContributions);
+    }
 
     const ouReturnAmount = round2(bal.ouInv - ouInvBeforeReturn);
     const iiReturnAmount = round2(bal.ii - iiBeforeReturn - iiContributions);
