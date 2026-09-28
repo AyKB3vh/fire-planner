@@ -5,6 +5,7 @@ import { useApp, Card, Field, SelectField, Toggle, eur, pct } from '../component
 import { updateScenario } from '../../state/store';
 import type { Adult, BucketKey, Provenance, Scenario } from '../../types';
 import { BUCKET_KEYS } from '../../types';
+import { commitScenario, runOptimisationAsync } from '../../state/store';
 
 const BUCKET_LABELS: Record<BucketKey, string> = {
   personalCash: 'Personal cash',
@@ -31,8 +32,24 @@ const PROVENANCE_OPTIONS: { value: Provenance; label: string }[] = [
   { value: 'userAssumed', label: 'User assumption' },
 ];
 
+function findInvalidNumber(value: unknown, path = 'scenario'): string | null {
+  if (typeof value === 'number' && !Number.isFinite(value)) return path;
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const invalid = findInvalidNumber(value[index], `${path}[${index}]`);
+      if (invalid) return invalid;
+    }
+  } else if (value && typeof value === 'object') {
+    for (const [key, child] of Object.entries(value)) {
+      const invalid = findInvalidNumber(child, `${path}.${key}`);
+      if (invalid) return invalid;
+    }
+  }
+  return null;
+}
+
 export function InputsView(): ReactElement {
-  const { scenario } = useApp();
+  const { scenario, quick, running } = useApp();
   const a = scenario.assumptions;
   const es = scenario.engineSettings;
   const mc = scenario.monteCarloSettings;
@@ -44,22 +61,48 @@ export function InputsView(): ReactElement {
 
   const startYear = Number(ss.withdrawalStartDate.slice(0, 4));
   const startDateOk = /^\d{4}-01-01$/.test(ss.withdrawalStartDate);
+  const totalAssets = ss.balances.personalCash + ss.balances.ouCash + ss.balances.ouInvestments + ss.balances.iiPillar + ss.balances.iiiPillar;
+  const ouEquity = ss.balances.ouCash + ss.balances.ouInvestments - ss.balances.shareholderLoan;
+  const blockingIssues = quick?.validated.issues.filter((i) => i.severity === 'error') ?? [];
+  const warnings = quick?.validated.issues.filter((i) => i.severity === 'warning') ?? [];
+  const invalidNumber = findInvalidNumber(scenario);
+  const blockerCount = Math.max(blockingIssues.length, invalidNumber ? 1 : 0);
 
   return (
-    <div className="grid" style={{ gap: 14 }}>
+    <div className="grid inputs-page" style={{ gap: 14 }} onWheelCapture={(event) => { if ((event.target as HTMLElement).matches?.('input[type="number"]')) (event.target as HTMLInputElement).blur(); }}>
+      <section className="card plan-summary" aria-label="Your plan summary">
+        <div className="plan-summary-heading"><div><span className="eyebrow">Inputs</span><h2>Your plan</h2></div><button className="btn primary" disabled={running || blockerCount > 0} onClick={() => void runOptimisationAsync()}>Run search →</button></div>
+        <div className="plan-facts">
+          <div><span>Retirement</span><b>{startYear || '—'}</b></div>
+          <div><span>Household</span><b>{scenario.household.adults.length} {scenario.household.adults.length === 1 ? 'adult' : 'adults'}</b></div>
+          <div><span>Starting assets</span><b>{eur(totalAssets)}</b></div>
+          <div><span>OÜ net equity</span><b>{eur(ouEquity)}</b></div>
+          <div><span>Annual spending</span><b>{eur(a.spending.targetAnnualTodayEUR)}</b></div>
+          <div><span>Expected return</span><b>{pct(a.returns.ou.geometricReturn)}</b></div>
+          <div><span>Minimum reserve</span><b>{eur(ss.minimumCashReserve)}</b></div>
+        </div>
+        {blockerCount ? <div className="danger-note">{blockerCount} inputs need attention: {blockingIssues.slice(0, 3).map((i) => i.message).join(' ')} {invalidNumber ? `${invalidNumber} must contain a valid number.` : ''}</div> : <div className="ok-note">✓ Required starting inputs complete</div>}
+        {warnings.slice(0, 2).map((issue, idx) => <div className="warn-note" key={`${issue.field}-${idx}`}>⚠ {issue.message}</div>)}
+      </section>
       {!startDateOk ? (
         <div className="danger-note">
-          Withdrawal start must be <b>1 January</b> of a calendar year (D-01) — it is a fixed
+          Retirement start must be <b>1 January</b> of a calendar year — it is a fixed
           input, never inferred, and no date other than 01-01 is accepted.
         </div>
       ) : null}
 
-      <Card title="Household">
+      <Card title="1. Household" className="primary-section">
         {scenario.household.adults.map((adult, idx) => (
           <div key={adult.id} className="mb">
+            <details className="adult-details" open={idx === 0}>
+            <summary>
             <b>
               Adult {idx + 1}: {adult.name}
             </b>
+            <span className="muted"> · Born {adult.birthMonth ? new Date(2000, adult.birthMonth - 1).toLocaleString('en', { month: 'long' }) : 'month unknown'} {adult.birthYear} · {adult.remunerationType === 'employment' ? 'Employment' : 'Board member fee'} · State pension {adult.statePensionEnabled ? 'enabled' : 'disabled'}</span>
+            <span className="edit-label">Edit details</span>
+            </summary>
+            <div className="adult-content">
             <div className="form-grid mt">
               <Field
                 label="Name"
@@ -98,10 +141,10 @@ export function InputsView(): ReactElement {
                 label="Remuneration type"
                 value={adult.remunerationType}
                 options={[
-                  { value: 'employment', label: 'employment (tööleping)' },
-                  { value: 'boardMemberFee', label: 'boardMemberFee (juhatuse liige)' },
+                  { value: 'employment', label: 'Employment' },
+                  { value: 'boardMemberFee', label: 'Board member fee' },
                 ]}
-                hint="Explicit per adult; never switched silently (D-14)"
+                hint="Recorded separately for each adult."
                 onChange={(v) =>
                   patch((s) => {
                     s.household.adults[idx].remunerationType = v as Adult['remunerationType'];
@@ -179,14 +222,16 @@ export function InputsView(): ReactElement {
                 }
               />
             </div>
+            </div>
+            </details>
           </div>
         ))}
       </Card>
 
-      <Card title="Withdrawal start & starting state (D-01: fixed input)">
+      <Card title="2. Retirement & starting position" className="primary-section">
         <div className="form-grid">
           <Field
-            label="Withdrawal start (YYYY-01-01)"
+            label="Retirement start year (1 January)"
             type="text"
             value={ss.withdrawalStartDate}
             hint="1 January only — validated on commit"
@@ -225,12 +270,13 @@ export function InputsView(): ReactElement {
         </div>
       </Card>
 
-      <Card title="Balances">
+      <Card title="Starting balances" className="primary-section">
         <div className="form-grid">
           {BUCKET_KEYS.map((k) => (
             <div key={k}>
               <Field
                 label={`${BUCKET_LABELS[k]} (€)`}
+                hint={k === 'shareholderLoan' ? 'Money your OÜ owes you. The loan is shown separately and is not added to total assets.' : undefined}
                 value={ss.balances[k]}
                 onChange={(v: number) =>
                   patch((s) => {
@@ -260,7 +306,7 @@ export function InputsView(): ReactElement {
         </div>
       </Card>
 
-      <Card title="Spending & inflation">
+      <Card title="3. Spending" className="primary-section">
         <div className="form-grid">
           <Field
             label="Annual spending, today's €"
@@ -274,10 +320,10 @@ export function InputsView(): ReactElement {
           />
           <Field
             label="General inflation"
-            type="number"
-            step={0.001}
+            step={0.1}
             value={a.generalInflation}
             hint={pct(a.generalInflation, 2)}
+            percentage
             onChange={(v: number) =>
               patch((s) => {
                 s.assumptions.generalInflation = v;
@@ -286,9 +332,10 @@ export function InputsView(): ReactElement {
           />
           <Field
             label="Spending inflation"
-            step={0.001}
+            step={0.1}
             value={a.spendingInflation}
             hint={pct(a.spendingInflation, 2)}
+            percentage
             onChange={(v: number) =>
               patch((s) => {
                 s.assumptions.spendingInflation = v;
@@ -297,9 +344,10 @@ export function InputsView(): ReactElement {
           />
           <Field
             label="Healthcare inflation"
-            step={0.001}
+            step={0.1}
             value={a.healthcareInflation}
             hint={pct(a.healthcareInflation, 2)}
+            percentage
             onChange={(v: number) =>
               patch((s) => {
                 s.assumptions.healthcareInflation = v;
@@ -307,7 +355,7 @@ export function InputsView(): ReactElement {
             }
           />
           <Toggle
-            label="Premiums already inside spending input"
+            label="Healthcare premiums are included in annual spending"
             checked={a.spending.premiumsIncludedInSpending}
             onChange={(v) =>
               patch((s) => {
@@ -315,6 +363,7 @@ export function InputsView(): ReactElement {
               })
             }
           />
+          <div className="inline-note">Healthcare premiums are {a.spending.premiumsIncludedInSpending ? `included in your ${eur(a.spending.targetAnnualTodayEUR)} annual spending figure` : `added on top of your ${eur(a.spending.targetAnnualTodayEUR)} annual spending figure`}.</div>
           <Field
             label="Voluntary healthcare premium, today €/mo"
             value={a.voluntaryPremiumTodayEUR}
@@ -328,7 +377,7 @@ export function InputsView(): ReactElement {
         </div>
       </Card>
 
-      <Card title="Spending multipliers & one-offs">
+      <Card title="Advanced · Spending changes & one-off costs" collapsible>
         <b>Range multipliers</b>
         <table className="mb">
           <thead>
@@ -348,7 +397,7 @@ export function InputsView(): ReactElement {
                     value={m.fromYear}
                     onChange={(e) =>
                       patch((sc) => {
-                        sc.assumptions.spending.multipliers[i].fromYear = Number(e.target.value);
+                        sc.assumptions.spending.multipliers[i].fromYear = e.target.value === '' ? Number.NaN : Number(e.target.value);
                       })
                     }
                     style={numStyle}
@@ -360,7 +409,7 @@ export function InputsView(): ReactElement {
                     value={m.toYear}
                     onChange={(e) =>
                       patch((sc) => {
-                        sc.assumptions.spending.multipliers[i].toYear = Number(e.target.value);
+                        sc.assumptions.spending.multipliers[i].toYear = e.target.value === '' ? Number.NaN : Number(e.target.value);
                       })
                     }
                     style={numStyle}
@@ -373,7 +422,7 @@ export function InputsView(): ReactElement {
                     value={m.multiplier}
                     onChange={(e) =>
                       patch((sc) => {
-                        sc.assumptions.spending.multipliers[i].multiplier = Number(e.target.value);
+                        sc.assumptions.spending.multipliers[i].multiplier = e.target.value === '' ? Number.NaN : Number(e.target.value);
                       })
                     }
                     style={{ ...numStyle, textAlign: 'right' }}
@@ -425,7 +474,7 @@ export function InputsView(): ReactElement {
                     value={o.year}
                     onChange={(e) =>
                       patch((sc) => {
-                        sc.assumptions.spending.oneOffs[i].year = Number(e.target.value);
+                        sc.assumptions.spending.oneOffs[i].year = e.target.value === '' ? Number.NaN : Number(e.target.value);
                       })
                     }
                     style={numStyle}
@@ -437,7 +486,7 @@ export function InputsView(): ReactElement {
                     value={o.amount}
                     onChange={(e) =>
                       patch((sc) => {
-                        sc.assumptions.spending.oneOffs[i].amount = Number(e.target.value);
+                        sc.assumptions.spending.oneOffs[i].amount = e.target.value === '' ? Number.NaN : Number(e.target.value);
                       })
                     }
                     style={{ ...numStyle, textAlign: 'right' }}
@@ -472,7 +521,7 @@ export function InputsView(): ReactElement {
         </button>
       </Card>
 
-      <Card title="Actuals ledger — realised balances & spending by year">
+      <Card title="Actuals & tracking · Track realised balances and spending against your plan" collapsible>
         <div className="inline-note">
           Actuals override projected balances at the start of each listed year and are reported
           as an explicit revaluation-variance line in the Audit/projection output.
@@ -567,19 +616,27 @@ export function InputsView(): ReactElement {
             })
           }
         >
-          Add actuals for first withdrawal year
+          Add actual year
         </button>
       </Card>
 
-      <Card title="Return assumptions">
+      <Card title="4. Pensions & healthcare" className="primary-section">
+        <div className="inline-note">Pension ages, access timing and healthcare coverage follow your household settings. Detailed overrides remain available below in Advanced.</div>
+        <div className="form-grid">
+          {scenario.household.adults.map((adult, idx) => <div key={adult.id} className="mini-card"><b>{adult.name || `Adult ${idx + 1}`}</b><Toggle label="Healthcare coverage required" checked={adult.healthcareRequired} onChange={(v) => patch((s) => { s.household.adults[idx].healthcareRequired = v; })} /><Toggle label="State pension enabled" checked={adult.statePensionEnabled} onChange={(v) => patch((s) => { s.household.adults[idx].statePensionEnabled = v; })} /></div>)}
+        </div>
+      </Card>
+
+      <Card title="5. Investment assumptions" className="primary-section">
         <div className="form-grid">
           {(['ou', 'ii', 'iii'] as const).map((k) => (
             <div key={k}>
               <Field
-                label={`${k.toUpperCase()} geometric return`}
-                step={0.001}
+                label={`Expected ${k.toUpperCase()} investment return`}
+                step={0.1}
                 value={a.returns[k].geometricReturn}
                 hint={pct(a.returns[k].geometricReturn, 2)}
+                percentage
                 onChange={(v: number) =>
                   patch((s) => {
                     s.assumptions.returns[k].geometricReturn = v;
@@ -587,9 +644,11 @@ export function InputsView(): ReactElement {
                 }
               />
               <Field
-                label={`${k.toUpperCase()} log volatility`}
-                step={0.01}
+                label={`${k.toUpperCase()} investment volatility`}
+                step={1}
                 value={a.returns[k].logVolatility}
+                hint={pct(a.returns[k].logVolatility, 1)}
+                percentage
                 onChange={(v: number) =>
                   patch((s) => {
                     s.assumptions.returns[k].logVolatility = v;
@@ -599,10 +658,11 @@ export function InputsView(): ReactElement {
             </div>
           ))}
           <Field
-            label="Cash rate"
-            step={0.001}
+            label="Expected cash return"
+            step={0.1}
             value={a.returns.cashRate}
             hint={pct(a.returns.cashRate, 2)}
+            percentage
             onChange={(v: number) =>
               patch((s) => {
                 s.assumptions.returns.cashRate = v;
@@ -621,9 +681,10 @@ export function InputsView(): ReactElement {
           />
           <Field
             label="Reinvestment share of surplus"
-            step={0.05}
             value={a.reinvestmentPct}
             hint={pct(a.reinvestmentPct, 0)}
+            percentage
+            step={5}
             onChange={(v: number) =>
               patch((s) => {
                 s.assumptions.reinvestmentPct = v;
@@ -633,10 +694,11 @@ export function InputsView(): ReactElement {
 
           <Field
             label="Extra spending cap (% of target)"
-            step={0.05}
             min={0}
             value={a.surplusSpendingCapPctOfTarget}
             hint={pct(a.surplusSpendingCapPctOfTarget, 0)}
+            percentage
+            step={5}
             onChange={(v: number) =>
               patch((s) => {
                 s.assumptions.surplusSpendingCapPctOfTarget = v;
@@ -654,8 +716,10 @@ export function InputsView(): ReactElement {
           />
           <Field
             label="State pension indexation"
-            step={0.001}
+            step={0.1}
             value={a.statePensionIndexation}
+            hint={pct(a.statePensionIndexation, 2)}
+            percentage
             onChange={(v: number) =>
               patch((s) => {
                 s.assumptions.statePensionIndexation = v;
@@ -678,7 +742,8 @@ export function InputsView(): ReactElement {
         </div>
       </Card>
 
-      <Card title="Engine settings">
+      <Card title="6. Advanced settings">
+      <Card title="Engine settings" collapsible>
         <div className="form-grid">
           <Toggle
             label="Reserve usable as last resort"
@@ -735,9 +800,10 @@ export function InputsView(): ReactElement {
           />
           <Field
             label="II contribution rate"
-            step={0.01}
+            step={0.1}
             value={es.iiContributionRate}
             hint="spec default 0%"
+            percentage
             onChange={(v: number) =>
               patch((s) => {
                 s.engineSettings.iiContributionRate = v;
@@ -747,7 +813,7 @@ export function InputsView(): ReactElement {
         </div>
       </Card>
 
-      <Card title="Pillar access overrides (Gate G1 evidence is binding)">
+      <Card title="Pension access overrides" collapsible>
         <div className="form-grid">
           <Field
             label="II access year (0 = derived)"
@@ -802,7 +868,7 @@ export function InputsView(): ReactElement {
         </div>
       </Card>
 
-      <Card title="Monte Carlo settings">
+      <Card title="Monte Carlo settings" collapsible>
         <div className="form-grid">
           <SelectField
             label="Target success probability"
@@ -865,7 +931,7 @@ export function InputsView(): ReactElement {
         </div>
       </Card>
 
-      <Card title="Search settings (advanced)">
+      <Card title="Search settings" collapsible>
         <div className="form-grid">
           <Field
             label="II delay min (years)"
@@ -926,6 +992,11 @@ export function InputsView(): ReactElement {
           kinks). Kinks are derived from the tax/healthcare rule registry for the start year.
         </div>
       </Card>
+      </Card>
+      <div className="sticky-runbar">
+        <div>{blockerCount ? <span className="text-danger">{blockerCount} inputs need attention</span> : <span className="text-ok">✓ Inputs valid</span>}</div>
+        <div className="sticky-actions"><button className="btn" onClick={commitScenario}>Save</button><button className="btn primary" disabled={running || blockerCount > 0} onClick={() => void runOptimisationAsync()}>Run search →</button></div>
+      </div>
     </div>
   );
 }
