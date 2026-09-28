@@ -8,7 +8,11 @@ import type { StochasticState } from '../returns';
 import { buildDeterministicPath } from '../returns';
 import { computeHorizon, runPolicy } from '../projection';
 import { buildPolicy } from '../policy';
-import { pillarAccess } from '../pillars';
+import {
+  NORMALISED_PILLAR_UNITS,
+  unitsToRedeem,
+  paymentFromUnits,
+} from '../pillars';
 import { adult, ctxFor } from './fixtures';
 import type { ProjectionContext } from '../projection';
 import type { Policy } from '../../types';
@@ -424,6 +428,63 @@ describe('pillar mechanics', () => {
     const r2 = runPolicy(ctx, p2, central(ctx));
     expect(r2.years.find((y) => y.year === 2046)?.inflows.pillarIIIPayment).toBe(0);
     expect(r2.years.find((y) => y.year === 2048)!.inflows.pillarIIIPayment).toBeGreaterThan(0);
+  });
+
+  it('unit helpers preserve balance via units × NAV and redeem the correct units', () => {
+    const balance = 750_000;
+    const units = NORMALISED_PILLAR_UNITS;
+    const nav = balance / units;
+
+    expect(nav).toBeCloseTo(0.75, 12);
+
+    const redeemed = unitsToRedeem(units, 20);
+    expect(redeemed).toBeCloseTo(50_000, 12);
+    expect(paymentFromUnits(redeemed, nav)).toBeCloseTo(37_500, 2);
+    expect(paymentFromUnits(redeemed, 0.825)).toBeCloseTo(41_250, 2);
+    expect((units - redeemed) * nav).toBeCloseTo(712_500, 2);
+  });
+
+  it('funded pension returns change NAV while unit count stays unchanged', () => {
+    const units = NORMALISED_PILLAR_UNITS;
+    const nav = 0.75 * 1.10;
+    expect(units).toBe(NORMALISED_PILLAR_UNITS);
+    expect(nav).toBeCloseTo(0.825, 12);
+    expect(units * nav).toBeCloseTo(825_000, 2);
+  });
+
+  it('a full unit-based contract redeems all units', () => {
+    let units = NORMALISED_PILLAR_UNITS;
+    for (let remaining = 20; remaining >= 1; remaining -= 1) {
+      units -= unitsToRedeem(units, remaining);
+    }
+    expect(units).toBeCloseTo(0, 9);
+  });
+
+  it('projection uses unit-based pension payments and NAV growth', () => {
+    const ctx = ctxFor({
+      adults: [adult({ id: 'a', birthYear: 1975 })],
+      startYear: 2030,
+      personalCash: 0,
+      ouCash: 0,
+      ouInvestments: 0,
+      shareholderLoan: 0,
+      iiPillar: 0,
+      iiiPillar: 750_000,
+      minimumCashReserve: 0,
+      spending: 26_786,
+      mutateAssumptions: (a) => {
+        a.spendingInflation = 0;
+        a.returns.ou.geometricReturn = 0;
+        a.returns.ii.geometricReturn = 0;
+        a.returns.iii.geometricReturn = 0.10;
+        a.returns.cashRate = 0;
+        a.voluntaryPremiumTodayEUR = 0;
+      },
+    });
+    const r = runPolicy(ctx, policyFor(ctx, 'LoanFirst'), central(ctx));
+    const y0 = r.years[0];
+    expect(y0.inflows.pillarIIIPayment).toBeCloseTo(750_000 / 28, 2);
+    expect(y0.end.iiiPillar).toBeCloseTo((750_000 * 27 / 28) * 1.10, 2);
   });
 
   it('pillar payments carry no personal income tax and do not consume exemption', () => {
