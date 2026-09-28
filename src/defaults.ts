@@ -105,6 +105,7 @@ export function defaultAssumptions(): Assumptions {
     statePensionTodayEUR: 800,
     statePensionIndexation: 0.02,
     reinvestmentPct: 0.75,
+    surplusSpendingCapPctOfTarget: 0.5,
     consumptionValuationRate: 0.06,
     pvDiscountRate: 0.06,
     maxRemunerationPerAdult: 2_000,
