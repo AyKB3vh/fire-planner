@@ -277,12 +277,13 @@ describe('retirement surplus rule', () => {
     const ctx = surplusCtx();
     const r = runPolicy(ctx, policyFor(ctx, 'LoanFirst'), central(ctx));
     const y0 = r.years[0];
-    expect(y0.inflows.pillarIIIPayment).toBeCloseTo(80_000, 2);
-    expect(y0.extraSpending).toBeCloseTo(5_000, 2);
-    expect(y0.inflows.reinvestment).toBeCloseTo(15_000, 2);
-    expect(y0.realisedSpending).toBeCloseTo(65_000, 2);
+    // Each of 336 monthly payments is rounded to cents at settlement.
+    expect(y0.inflows.pillarIIIPayment).toBeCloseTo(Math.round((2_240_000 / 336) * 100) / 100 * 12, 2);
+    expect(y0.extraSpending).toBeCloseTo(5_000.01, 2);
+    expect(y0.inflows.reinvestment).toBeCloseTo(15_000.03, 2);
+    expect(y0.realisedSpending).toBeCloseTo(65_000.01, 2);
     // recycling creates shareholder-loan principal
-    expect(y0.end.shareholderLoan).toBeCloseTo(15_000, 2);
+    expect(y0.end.shareholderLoan).toBeCloseTo(15_000.03, 2);
     // a repayment and a new loan never occur in the same year
     expect(y0.inflows.loanRepayment).toBe(0);
     // extra spending is not left as accidental cash
@@ -310,9 +311,9 @@ describe('retirement surplus rule', () => {
 
     // Income €200k, target €50k -> surplus €150k.
     // Desired extra spending is €37.5k, but the 50% target cap is €25k.
-    expect(y0.inflows.pillarIIIPayment).toBeCloseTo(200_000, 2);
+    expect(y0.inflows.pillarIIIPayment).toBeCloseTo(Math.round((5_600_000 / 336) * 100) / 100 * 12, 2);
     expect(y0.extraSpending).toBeCloseTo(25_000, 2);
-    expect(y0.inflows.reinvestment).toBeCloseTo(125_000, 2);
+    expect(y0.inflows.reinvestment).toBeCloseTo(125_000.04, 2);
     expect(y0.realisedSpending).toBeCloseTo(75_000, 2);
   });
 
@@ -473,6 +474,7 @@ describe('pillar mechanics', () => {
       shareholderLoan: 0,
       iiPillar: 0,
       iiiPillar: 750_000,
+      pillarOverrides: { iiiAccessYear: 2030 },
       minimumCashReserve: 0,
       spending: 26_786,
       mutateAssumptions: (a) => {
@@ -486,8 +488,9 @@ describe('pillar mechanics', () => {
     });
     const r = runPolicy(ctx, policyFor(ctx, 'LoanFirst'), central(ctx));
     const y0 = r.years[0];
-    expect(y0.inflows.pillarIIIPayment).toBeCloseTo(750_000 / 28, 2);
-    expect(y0.end.iiiPillar).toBeCloseTo((750_000 * 27 / 28) * 1.10, 2);
+    const monthlyPayment = Math.round((750_000 / 336) * 100) / 100;
+    expect(y0.inflows.pillarIIIPayment).toBeCloseTo(monthlyPayment * 12, 2);
+    expect(y0.end.iiiPillar).toBeCloseTo(795_535.71, 2);
   });
 
   it('funded pension contracts make 12 monthly payments per model year at the same NAV when returns are zero', () => {
@@ -500,6 +503,7 @@ describe('pillar mechanics', () => {
       shareholderLoan: 0,
       iiPillar: 1_000_000 * 28,
       iiiPillar: 1_000_000 * 28,
+      pillarOverrides: { iiAccessYear: 2030, iiiAccessYear: 2030 },
       minimumCashReserve: 0,
       spending: 1_000_000_000,
       mutateAssumptions: (a) => {
@@ -517,7 +521,7 @@ describe('pillar mechanics', () => {
 
     // 28-year contract = 336 monthly payments. At €1/unit NAV each
     // monthly payment is 1,000,000 / 336; twelve payments = 1/28 of balance.
-    const expectedAnnual = 1_000_000 * 12 / (28 * 12);
+    const expectedAnnual = Math.round((28_000_000 / 336) * 100) / 100 * 12;
     expect(y0.inflows.pillarIIPayment).toBeCloseTo(expectedAnnual, 2);
     expect(y0.inflows.pillarIIIPayment).toBeCloseTo(expectedAnnual, 2);
   });
@@ -542,7 +546,7 @@ describe('pillar mechanics', () => {
     const firstAnnualisedStream = firstMonthlyPayment * 12;
 
     expect(firstMonthlyPayment).toBeCloseTo(0.75 * 1_000_000 / 336, 12);
-    expect(firstAnnualisedStream).toBeCloseTo(8_928.57, 2);
+    expect(firstAnnualisedStream).toBeCloseTo(26_785.71, 2);
     expect(firstAnnualisedStream).not.toBeCloseTo(0.75 * 1_000_000 / 28 * 12, 2);
   });
 
