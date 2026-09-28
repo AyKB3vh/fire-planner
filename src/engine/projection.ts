@@ -524,8 +524,12 @@ export function runPolicy(
          shareholder loan. */
       consume(needBase);
       bal.cash = round2(bal.cash - needBase);
-      reinvestment = round2(surplus * assumptions.reinvestmentPct);
-      extraSpending = round2(surplus - reinvestment);
+      const desiredExtraSpending = round2(surplus * (1 - assumptions.reinvestmentPct));
+      const extraSpendingCap = round2(
+        nominalTarget * assumptions.surplusSpendingCapPctOfTarget,
+      );
+      extraSpending = round2(Math.min(desiredExtraSpending, extraSpendingCap));
+      reinvestment = round2(surplus - extraSpending);
       bal.cash = round2(bal.cash - reinvestment - extraSpending);
       bal.loan = round2(bal.loan + reinvestment);
       bal.ouCash = round2(bal.ouCash + reinvestment);
