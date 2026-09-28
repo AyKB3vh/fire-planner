@@ -9,6 +9,7 @@ import { buildDeterministicPath } from '../returns';
 import { computeHorizon, runPolicy } from '../projection';
 import { buildPolicy } from '../policy';
 import {
+  pillarAccess,
   NORMALISED_PILLAR_UNITS,
   unitsToRedeem,
   paymentFromUnits,
