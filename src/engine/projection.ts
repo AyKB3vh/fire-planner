@@ -259,12 +259,16 @@ export function runPolicy(
     ii: startState.balances.iiPillar,
     iii: startState.balances.iiiPillar,
   };
-  let iiRemaining = events.iiRemainingAtStart;
-  let iiiRemaining = events.iiiRemainingAtStart;
+  // Remaining funded-pension payments are tracked in monthly periods.
+  // The contract duration itself remains expressed in years.
+  let iiRemaining = events.iiRemainingAtStart * 12;
+  let iiiRemaining = events.iiiRemainingAtStart * 12;
 
-  // Funded-pension contract state. Before contract start, balances remain
-  // ordinary EUR balances. At contract start, each pillar is normalised to
-  // synthetic units with a NAV preserving the balance exactly.
+  // Remaining funded-pension payments are tracked in monthly periods.
+  // The contract duration itself remains expressed in years.
+  // Before contract start, balances remain ordinary EUR balances. At contract
+  // start, each pillar is normalised to synthetic units with NAV preserving
+  // the balance exactly.
   let iiUnits = 0;
   let iiiUnits = 0;
   let iiNav = 0;
@@ -413,7 +417,13 @@ export function runPolicy(
       remNetTotal = round2(remNetTotal + remNetByAdult[a.id]);
     }
 
-    /* STEP 3b — pillar fixed-term payments (start of year, 0% tax) ------- */
+    /* STEP 3b — monthly funded-pension payments (0% tax) ---------------- */
+    let pillarIIIPayment = 0;
+    let pillarIIPayment = 0;
+
+    // The public projection remains annual, but funded-pension contracts settle
+    // monthly. Investment returns continue to be applied once per model year.
+    // Monthly unit redemptions use the remaining monthly payment count.
     if (!iiiContractInitialised && year >= events.iiiContractStart && bal.iii > 0) {
       iiiUnits = NORMALISED_PILLAR_UNITS;
       iiiNav = bal.iii / iiiUnits;
@@ -424,24 +434,38 @@ export function runPolicy(
       iiNav = bal.ii / iiUnits;
       iiContractInitialised = true;
     }
-    let pillarIIIPayment = 0;
-    let pillarIIPayment = 0;
-    if (iiiContractInitialised && iiiRemaining > 0 && iiiUnits > 0) {
+
+    const iiiPaymentsThisYear =
+      iiiContractInitialised && iiiRemaining > 0
+        ? Math.min(12, Math.max(0, iiiRemaining))
+        : 0;
+    const iiPaymentsThisYear =
+      iiContractInitialised && iiRemaining > 0
+        ? Math.min(12, Math.max(0, iiRemaining))
+        : 0;
+
+    for (let month = 0; month < iiiPaymentsThisYear; month += 1) {
       const unitsRedeemed = unitsToRedeem(iiiUnits, iiiRemaining);
       const pay = round2(paymentFromUnits(unitsRedeemed, iiiNav));
       iiiUnits -= unitsRedeemed;
-      pillarIIIPayment = pay;
+      pillarIIIPayment = round2(pillarIIIPayment + pay);
       iiiRemaining -= 1;
+    }
+    if (iiiContractInitialised && iiiPaymentsThisYear > 0) {
       bal.iii = round2(iiiUnits * iiiNav);
     }
-    if (iiContractInitialised && iiRemaining > 0 && iiUnits > 0) {
+
+    for (let month = 0; month < iiPaymentsThisYear; month += 1) {
       const unitsRedeemed = unitsToRedeem(iiUnits, iiRemaining);
       const pay = round2(paymentFromUnits(unitsRedeemed, iiNav));
       iiUnits -= unitsRedeemed;
-      pillarIIPayment = pay;
+      pillarIIPayment = round2(pillarIIPayment + pay);
       iiRemaining -= 1;
+    }
+    if (iiContractInitialised && iiPaymentsThisYear > 0) {
       bal.ii = round2(iiUnits * iiNav);
     }
+
     const pillarPayments = round2(pillarIIIPayment + pillarIIPayment);
     const contractInflows = round2(
       Object.values(pensionNetByAdult).reduce((s, v) => s + v, 0) + pillarPayments,
@@ -675,6 +699,9 @@ export function runPolicy(
 
     bal.ouInv = round2(bal.ouInv * (1 + rOu));
     if (iiContractInitialised) {
+      // The existing return assumptions are annual. Keep the current model's
+      // annual return convention and apply that annual factor to the NAV once
+      // after the year's monthly payments.
       iiNav *= 1 + rIi;
       bal.ii = round2(iiUnits * iiNav);
     } else {
