@@ -487,6 +487,62 @@ describe('pillar mechanics', () => {
     expect(y0.end.iiiPillar).toBeCloseTo((750_000 * 27 / 28) * 1.10, 2);
   });
 
+  it('funded pension contracts make 12 payments per year at the same NAV when returns are zero', () => {
+    const ctx = ctxFor({
+      adults: [adult({ id: 'a', birthYear: 1975 })],
+      startYear: 2030,
+      personalCash: 0,
+      ouCash: 0,
+      ouInvestments: 0,
+      shareholderLoan: 0,
+      iiPillar: 1_000_000,
+      iiiPillar: 1_000_000,
+      minimumCashReserve: 0,
+      spending: 1_000_000,
+      mutateAssumptions: (a) => {
+        a.spendingInflation = 0;
+        a.returns.ou.geometricReturn = 0;
+        a.returns.ii.geometricReturn = 0;
+        a.returns.iii.geometricReturn = 0;
+        a.returns.cashRate = 0;
+        a.voluntaryPremiumTodayEUR = 0;
+      },
+    });
+    const p = policyFor(ctx, 'LoanFirst');
+    const r = runPolicy(ctx, p, central(ctx));
+    const y0 = r.years[0];
+
+    // The 28-year contract is 336 monthly payments. With €1/unit NAV,
+    // each month redeems 1,000,000 / 336 units and pays €2,976.19.
+    const expectedMonthly = 1_000_000 / (28 * 12);
+    expect(y0.inflows.pillarIIPayment).toBeCloseTo(expectedMonthly * 12, 2);
+    expect(y0.inflows.pillarIIIPayment).toBeCloseTo(expectedMonthly * 12, 2);
+  });
+
+  it('monthly unit redemption exhausts the contract after the intended duration', () => {
+    let units = NORMALISED_PILLAR_UNITS;
+    let remaining = 28 * 12;
+    for (let payment = 0; payment < 28 * 12; payment += 1) {
+      const redeemed = unitsToRedeem(units, remaining);
+      units -= redeemed;
+      remaining -= 1;
+    }
+    expect(remaining).toBe(0);
+    expect(units).toBeCloseTo(0, 9);
+  });
+
+  it('monthly funded-pension payment is not an annual payment repeated 12 times', () => {
+    const units = NORMALISED_PILLAR_UNITS;
+    const nav = 0.75;
+    const remaining = 28 * 12;
+    const firstMonthlyPayment = paymentFromUnits(unitsToRedeem(units, remaining), nav);
+    const firstAnnualisedStream = firstMonthlyPayment * 12;
+
+    expect(firstMonthlyPayment).toBeCloseTo(0.75 * 1_000_000 / 336, 12);
+    expect(firstAnnualisedStream).toBeCloseTo(8_928.57, 2);
+    expect(firstAnnualisedStream).not.toBeCloseTo(0.75 * 1_000_000 / 28 * 12, 2);
+  });
+
   it('pillar payments carry no personal income tax and do not consume exemption', () => {
     const ctx = ctxFor({});
     const p = buildPolicy(ctx, {
