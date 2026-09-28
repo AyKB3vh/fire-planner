@@ -264,9 +264,11 @@ export function runPolicy(
   let iiRemaining = events.iiRemainingAtStart * 12;
   let iiiRemaining = events.iiiRemainingAtStart * 12;
 
-  // Funded-pension contract state. Before contract start, balances remain
-  // ordinary EUR balances. At contract start, each pillar is normalised to
-  // synthetic units with a NAV preserving the balance exactly.
+  // Remaining funded-pension payments are tracked in monthly periods.
+  // The contract duration itself remains expressed in years.
+  // Before contract start, balances remain ordinary EUR balances. At contract
+  // start, each pillar is normalised to synthetic units with NAV preserving
+  // the balance exactly.
   let iiUnits = 0;
   let iiiUnits = 0;
   let iiNav = 0;
