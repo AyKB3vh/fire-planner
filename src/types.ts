@@ -156,8 +156,10 @@ export interface Assumptions {
   /** State pension monthly amount (today's euros) per adult id; fallback below. */
   statePensionTodayEUR: number;
   statePensionIndexation: number;
-  /** Default (reinvestment share of surplus). */
+  /** Default reinvestment share of surplus before the spending cap is applied. */
   reinvestmentPct: number;
+  /** Maximum extra spending as a share of the nominal spending target. */
+  surplusSpendingCapPctOfTarget: number;
   /** Consumption valuation rate for ranked wealth; default = OÜ geometric return. */
   consumptionValuationRate: number;
   /** PV discount rate for lifetime tax; default = OÜ geometric return. */
