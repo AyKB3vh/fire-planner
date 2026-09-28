@@ -416,7 +416,9 @@ describe('pillar mechanics', () => {
       if (y.year < 2056) expect(y.inflows.pillarIIPayment).toBe(0);
     }
     const pay2046 = r.years.find((y) => y.year === 2046)!;
-    expect(pay2046.inflows.pillarIIIPayment).toBeCloseTo(pay2046.start.iiiPillar / 28, 1);
+    // 28-year III contract = 336 monthly payments, so the first model-year
+    // aggregate is approximately 12/336 of the opening balance.
+    expect(pay2046.inflows.pillarIIIPayment).toBeCloseTo(12 * pay2046.start.iiiPillar / 336, 1);
 
     const p2 = buildPolicy(ctx, {
       iiStartDelay: 2,
