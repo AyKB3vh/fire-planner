@@ -431,6 +431,37 @@ describe('pillar mechanics', () => {
     expect(r2.years.find((y) => y.year === 2048)!.inflows.pillarIIIPayment).toBeGreaterThan(0);
   });
 
+  it('projection uses unit-based pension payments and NAV growth', () => {
+    const ctx = ctxFor({
+      adults: [adult({ id: 'a', birthYear: 1975 })],
+      startYear: 2030,
+      personalCash: 0,
+      ouCash: 0,
+      ouInvestments: 0,
+      shareholderLoan: 0,
+      iiPillar: 0,
+      iiiPillar: 750_000,
+      minimumCashReserve: 0,
+      spending: 26_785,
+      mutateAssumptions: (a) => {
+        a.spendingInflation = 0;
+        a.returns.ou.geometricReturn = 0;
+        a.returns.ii.geometricReturn = 0;
+        a.returns.iii.geometricReturn = 0.10;
+        a.returns.cashRate = 0;
+        a.voluntaryPremiumTodayEUR = 0;
+      },
+    });
+    const r = runPolicy(ctx, policyFor(ctx, 'LoanFirst'), central(ctx));
+    const y0 = r.years[0];
+
+    // Contract starts in 2030 with 1,000,000 units and €0.75 NAV.
+    // First payment = 1/28 of the units × €0.75 = €26,785.71.
+    expect(y0.inflows.pillarIIIPayment).toBeCloseTo(750_000 / 28, 2);
+    // Returns apply to the remaining units through NAV growth.
+    expect(y0.end.iiiPillar).toBeCloseTo((750_000 * 27 / 28) * 1.10, 2);
+  });
+
   it('unit helpers preserve balance via units × NAV and redeem the correct units', () => {
     const balance = 750_000;
     const units = NORMALISED_PILLAR_UNITS;
