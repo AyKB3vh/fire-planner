@@ -906,6 +906,7 @@ export function runPolicy(
         cash: cashReturnAmount,
         total: round2(ouReturnAmount + iiReturnAmount + iiiReturnAmount + cashReturnAmount),
       },
+      appliedReturns: { ou: rOu, ii: rIi, iii: rIii, cash: cashRate },
       latentTax: round2(Math.max(0, equityEnd) * latentFactor),
       healthcareCost: healthcareResult.premiumPaid,
       minCashDuringYear,

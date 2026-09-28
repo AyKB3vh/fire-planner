@@ -687,6 +687,59 @@ describe('inflation and determinism', () => {
 });
 
 describe('conservation identity (§15.9)', () => {
+  it('reproduces the reported €500k OÜ / €250k per pillar / 10% return scenario without losing recycled surplus', () => {
+    const ctx = ctxFor({
+      adults: [adult({ id: 'older', birthYear: 1991 }), adult({ id: 'younger', birthYear: 1993 })],
+      startYear: 2033,
+      personalCash: 0,
+      ouCash: 0,
+      ouInvestments: 500_000,
+      iiPillar: 250_000,
+      iiiPillar: 250_000,
+      minimumCashReserve: 0,
+      spending: 35_000,
+      mutateAssumptions: (a) => {
+        a.spendingInflation = 0.025;
+        a.reinvestmentPct = 0.75;
+        a.returns.ou.geometricReturn = 0.10;
+        a.returns.ii.geometricReturn = 0.10;
+        a.returns.iii.geometricReturn = 0.10;
+      },
+    });
+    const p = buildPolicy(ctx, {
+      iiStartDelay: 0,
+      iiiStartDelay: 0,
+      bufferMonths: 0,
+      fundingRule: 'LoanFirst',
+      remuneration: Object.fromEntries(ctx.household.adults.map((a) => [a.id, [0]])),
+    });
+    const r = runPolicy(ctx, p, central(ctx));
+    const reinvestedYears = r.years.filter((y) => y.inflows.reinvestment > 0);
+    expect(reinvestedYears.length).toBeGreaterThan(0);
+    let prevNW = ctx.startState.balances.personalCash + ctx.startState.balances.ouCash +
+      ctx.startState.balances.ouInvestments + ctx.startState.balances.iiPillar + ctx.startState.balances.iiiPillar;
+    let sawLoanRepayment = false;
+    expect(r.years[0].appliedReturns.ou).toBeCloseTo(0.10, 8);
+    for (const y of reinvestedYears) {
+      expect(y.end.shareholderLoan - y.start.shareholderLoan).toBeCloseTo(y.inflows.reinvestment, 2);
+      expect(y.end.ouCash + y.end.ouInvestments + y.end.shareholderLoan).toBeGreaterThanOrEqual(0);
+    }
+    for (const y of r.years) {
+      const delta = y.netWorthEnd - prevNW;
+      const accounted = y.investmentReturns.total + y.inflows.statePensionGross - y.taxes.total -
+        y.healthPremium - y.realisedSpending + y.revaluationVariance;
+      expect(Math.abs(delta - accounted)).toBeLessThan(0.25);
+      if (y.inflows.loanRepayment > 0) {
+        sawLoanRepayment = true;
+        expect(y.start.shareholderLoan - y.end.shareholderLoan).toBeCloseTo(y.inflows.loanRepayment, 2);
+      }
+      prevNW = y.netWorthEnd;
+    }
+    expect(sawLoanRepayment).toBe(true);
+    expect(r.years.every((y) => y.netWorthEnd >= 0)).toBe(true);
+    expect(r.firstTotalDepletionYear).toBeNull();
+  });
+
   it('each year: ΔNW = returns + gross pension − taxes − premiums − spending (+ variance)', () => {
     const ctx = ctxFor({}); // full default household: pensions, pillars, remuneration, premiums
     const p = buildPolicy(ctx, {

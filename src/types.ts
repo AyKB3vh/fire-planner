@@ -375,6 +375,8 @@ export interface YearResult {
     cash: number;
     total: number;
   };
+  /** Simple annual rates actually applied after any configured return floor. */
+  appliedReturns: { ou: number; ii: number; iii: number; cash: number };
   latentTax: number;
   healthcareCost: number;
   minCashDuringYear: number;

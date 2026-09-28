@@ -57,7 +57,7 @@ export function DashboardView(): ReactElement {
           points: years.map((y) => ({ x: y.year, y: y.end.iiiPillar })),
         },
         {
-          name: 'Shareholder loan (negative)',
+          name: 'Shareholder-loan principal receivable',
           color: COLORS.loan,
           points: years.map((y) => ({ x: y.year, y: y.end.shareholderLoan })),
         },
@@ -71,6 +71,68 @@ export function DashboardView(): ReactElement {
   const recFull = recCand?.full;
 
   const initialNW = years[0] ? nw(years[0].end) : null;
+
+  const returnsSeries: Series[] = years.length
+    ? [
+        {
+          name: 'OÜ investments',
+          color: COLORS.ou,
+          points: years.map((y) => ({
+            x: y.year,
+            y: y.investmentReturns.ou,
+            detail: pct(y.appliedReturns.ou, 1),
+          })),
+        },
+        {
+          name: 'II pillar',
+          color: COLORS.ii,
+          points: years.map((y) => ({
+            x: y.year,
+            y: y.investmentReturns.ii,
+            detail: pct(y.appliedReturns.ii, 1),
+          })),
+        },
+        {
+          name: 'III pillar',
+          color: COLORS.iii,
+          points: years.map((y) => ({
+            x: y.year,
+            y: y.investmentReturns.iii,
+            detail: pct(y.appliedReturns.iii, 1),
+          })),
+        },
+        {
+          name: 'Cash',
+          color: COLORS.cash,
+          points: years.map((y) => ({
+            x: y.year,
+            y: y.investmentReturns.cash,
+            detail: pct(y.appliedReturns.cash, 1),
+          })),
+        },
+        {
+          name: 'Total portfolio return',
+          color: COLORS.total,
+          points: years.map((y) => ({ x: y.year, y: y.investmentReturns.total })),
+        },
+      ]
+    : [];
+
+  const funds = years.map(
+    (y) =>
+      y.inflows.statePensionNet +
+      y.inflows.remunerationNet +
+      y.inflows.pillarIIPayment +
+      y.inflows.pillarIIIPayment +
+      y.inflows.loanRepayment +
+      y.inflows.distributionNet +
+      y.inflows.personalCashUsedAboveReserve +
+      y.inflows.emergencyReserveUsed,
+  );
+  const actualSpend = years.map((y) => y.healthPremium + y.realisedSpending);
+  const unallocated = years.map((y, i) =>
+    Math.max(0, funds[i] - actualSpend[i] - y.inflows.reinvestment),
+  );
 
   const balanceRows = years[0]
     ? [
@@ -178,7 +240,16 @@ export function DashboardView(): ReactElement {
         )}
       </Card>
 
-      <Card title="Funding sources of household spending — central diagnostic path">
+      <Card title="Portfolio returns year over year — central diagnostic path">
+        {quick?.policy ? (
+          <>
+            <LineChart series={returnsSeries} yFormat={(v) => eur(v)} />
+            <div className="inline-note">Annual return amounts are shown in euros. Hover over OÜ, II, III or cash to see the actual rate applied that year. Pillar payments are withdrawals, not investment returns.</div>
+          </>
+        ) : <div className="muted">No projection.</div>}
+      </Card>
+
+      <Card title="Family funds available for spending — central diagnostic path">
         {quick?.policy ? (
           <StackedBars
   years={years.map((y) => y.year)}
@@ -220,10 +291,24 @@ export function DashboardView(): ReactElement {
       ),
     },
   ]}
-/>
+      />
         ) : (
           <div className="muted">No projection.</div>
         )}
+      </Card>
+
+      <Card title="Spending and reinvestment">
+        {quick?.policy ? (
+          <>
+            <StackedBars years={years.map((y) => y.year)} series={[
+              { name: 'Healthcare', color: '#ff9eb5', values: years.map((y) => y.healthPremium) },
+              { name: 'Household spending', color: '#4da3ff', values: years.map((y) => y.realisedSpending) },
+              { name: 'Reinvested surplus (new shareholder loan)', color: '#f4c76b', values: years.map((y) => y.inflows.reinvestment) },
+              { name: 'Remaining available funds', color: '#7ee0a3', values: unallocated },
+            ]} />
+            <div className="inline-note">Reinvestment is shown separately from consumption. It increases OÜ cash and the household shareholder-loan receivable by the same amount. Later repayment is tax-free principal; OÜ gains accessed as a distribution are shown separately in family funds.</div>
+          </>
+        ) : <div className="muted">No projection.</div>}
       </Card>
 
       <div className="grid cols-2">
