@@ -71,6 +71,22 @@ let state: AppState = {
   selectedCandidateId: null,
 };
 
+function firstNonFiniteNumber(value: unknown, path: string): string | null {
+  if (typeof value === 'number' && !Number.isFinite(value)) return path;
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i += 1) {
+      const invalid = firstNonFiniteNumber(value[i], `${path}[${i}]`);
+      if (invalid) return invalid;
+    }
+  } else if (value && typeof value === 'object') {
+    for (const [key, child] of Object.entries(value)) {
+      const invalid = firstNonFiniteNumber(child, path ? `${path}.${key}` : key);
+      if (invalid) return invalid;
+    }
+  }
+  return null;
+}
+
 const listeners = new Set<() => void>();
 
 export function getState(): AppState {
@@ -205,6 +221,12 @@ export function cancelRun(): void {
 
 export async function runOptimisationAsync(): Promise<void> {
   if (running) return;
+  const invalidNumber = firstNonFiniteNumber(state.scenario, 'scenario');
+  if (invalidNumber) {
+    set({ error: `${invalidNumber} is empty or not a valid number. Correct it before running the search.` });
+    refreshQuick();
+    return;
+  }
   running = true;
   cancelRequested = false;
   set({ running: true, progress: null, error: null });

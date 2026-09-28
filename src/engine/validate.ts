@@ -16,6 +16,20 @@ export function validateStartingState(ctx: ProjectionContext): StartingStateVali
     issues.push({ field, message, severity: 'warning' });
   };
 
+  // Numeric fields can be temporarily blank in the Inputs UI. On blur they are
+  // represented as NaN until corrected, so a run must fail visibly instead of
+  // quietly using a previous value or coercing the blank to zero.
+  const checkFiniteNumbers = (value: unknown, path: string): void => {
+    if (typeof value === 'number' && !Number.isFinite(value)) {
+      err(path, `${path} is empty or not a valid number.`);
+    } else if (Array.isArray(value)) {
+      value.forEach((item, index) => checkFiniteNumbers(item, `${path}[${index}]`));
+    } else if (value && typeof value === 'object') {
+      Object.entries(value).forEach(([key, item]) => checkFiniteNumbers(item, path ? `${path}.${key}` : key));
+    }
+  };
+  checkFiniteNumbers(ctx, 'scenario');
+
   const fields: [BucketKey, string][] = [
     ['personalCash', 'Personal cash'],
     ['ouCash', 'OÜ cash'],
