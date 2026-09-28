@@ -630,7 +630,19 @@ export function InputsView(): ReactElement {
               })
             }
           />
+
           <Field
+            label="Extra spending cap (% of target)"
+            step={0.05}
+            min={0}
+            value={a.surplusSpendingCapPctOfTarget}
+            hint={pct(a.surplusSpendingCapPctOfTarget, 0)}
+            onChange={(v: number) =>
+              patch((s) => {
+                s.assumptions.surplusSpendingCapPctOfTarget = v;
+              })
+            }
+          />          <Field
             label="Max remuneration / adult / month (€)"
             value={a.maxRemunerationPerAdult}
             min={0}
