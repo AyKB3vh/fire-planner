@@ -8,7 +8,12 @@ import type { StochasticState } from '../returns';
 import { buildDeterministicPath } from '../returns';
 import { computeHorizon, runPolicy } from '../projection';
 import { buildPolicy } from '../policy';
-import { pillarAccess } from '../pillars';
+import {
+  pillarAccess,
+  NORMALISED_PILLAR_UNITS,
+  unitsToRedeem,
+  paymentFromUnits,
+} from '../pillars';
 import { adult, ctxFor } from './fixtures';
 import type { ProjectionContext } from '../projection';
 import type { Policy } from '../../types';
@@ -424,6 +429,40 @@ describe('pillar mechanics', () => {
     const r2 = runPolicy(ctx, p2, central(ctx));
     expect(r2.years.find((y) => y.year === 2046)?.inflows.pillarIIIPayment).toBe(0);
     expect(r2.years.find((y) => y.year === 2048)!.inflows.pillarIIIPayment).toBeGreaterThan(0);
+  });
+
+  it('unit helpers preserve balance via units × NAV and redeem the correct units', () => {
+    const balance = 750_000;
+    const units = NORMALISED_PILLAR_UNITS;
+    const nav = balance / units;
+
+    expect(nav).toBeCloseTo(0.75, 12);
+
+    const redeemed = unitsToRedeem(units, 20);
+    expect(redeemed).toBeCloseTo(50_000, 12);
+    expect(paymentFromUnits(redeemed, nav)).toBeCloseTo(37_500, 2);
+    expect((units - redeemed) * nav).toBeCloseTo(712_500, 2);
+
+    const higherNav = 0.825;
+    expect(paymentFromUnits(redeemed, higherNav)).toBeCloseTo(41_250, 2);
+  });
+
+  it('funded pension investment returns change NAV while units remain unchanged', () => {
+    const units = NORMALISED_PILLAR_UNITS;
+    let nav = 0.75;
+    nav *= 1.10;
+
+    expect(units).toBe(NORMALISED_PILLAR_UNITS);
+    expect(nav).toBeCloseTo(0.825, 12);
+    expect(units * nav).toBeCloseTo(825_000, 2);
+  });
+
+  it('pillar helper fully redeems a contract over its payment count', () => {
+    let units = NORMALISED_PILLAR_UNITS;
+    for (let remaining = 20; remaining >= 1; remaining -= 1) {
+      units -= unitsToRedeem(units, remaining);
+    }
+    expect(units).toBeCloseTo(0, 9);
   });
 
   it('pillar payments carry no personal income tax and do not consume exemption', () => {
