@@ -424,14 +424,21 @@ export function StackedBars({
 
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
+  // Treat invalid source values as missing for scaling/rendering. One
+  // non-finite funding value should not turn the whole chart into NaN geometry.
+  const safeValue = (s: { values: number[] }, i: number): number => {
+    const value = s.values[i] ?? 0;
+    return Number.isFinite(value) ? Math.max(0, value) : 0;
+  };
+
   const totals = years.map((_, i) =>
     series.reduce(
-      (acc, s) => acc + Math.max(0, s.values[i] ?? 0),
+      (acc, s) => acc + safeValue(s, i),
       0,
     ),
   );
 
-  const max = Math.max(...totals, 1);
+  const max = Math.max(...totals.filter(Number.isFinite), 1);
   const bw = (width - pad.l - pad.r) / years.length;
 
   const fmt =
@@ -494,7 +501,7 @@ export function StackedBars({
             return (
               <g key={yr}>
                 {series.map((s) => {
-                  const v = Math.max(0, s.values[i] ?? 0);
+                  const v = safeValue(s, i);
                   const h =
                     (v / max) *
                     (height - pad.t - pad.b);
