@@ -144,10 +144,19 @@ export function LineChart(props: LineChartProps): ReactElement {
 
   const [hoveredYear, setHoveredYear] = useState<number | null>(null);
 
-  const all = series.flatMap((s) => s.points);
+  // A single non-finite point must not poison the whole SVG scale.
+  // This can happen when a diagnostic projection contains an invalid value
+  // for one year; tooltips can still show the valid years.
+  const safeSeries = series.map((s) => ({
+    ...s,
+    points: s.points.filter(
+      (p) => Number.isFinite(p.x) && Number.isFinite(p.y),
+    ),
+  }));
+  const all = safeSeries.flatMap((s) => s.points);
 
   if (all.length === 0) {
-    return <div className="muted">No data.</div>;
+    return <div className="muted">No finite chart data.</div>;
   }
 
   const xs = all.map((p) => p.x);
@@ -261,7 +270,7 @@ export function LineChart(props: LineChartProps): ReactElement {
             </g>
           ) : null}
 
-          {series.map((s) => (
+          {safeSeries.map((s) => (
             <polyline
               key={s.name}
               fill="none"
