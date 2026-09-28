@@ -10,6 +10,9 @@
  * balances remaining after those flows. Money withdrawn at the start of the
  * year does not earn that year's investment return (deliberately conservative).
  *
+ * Funded pension contracts use synthetic units + NAV once a contract starts:
+ * the unit count tracks ownership and NAV carries investment performance.
+ *
  * Money: values rounded to cents at flow application points (round2).
  */
 
