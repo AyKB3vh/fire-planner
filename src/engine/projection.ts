@@ -259,8 +259,10 @@ export function runPolicy(
     ii: startState.balances.iiPillar,
     iii: startState.balances.iiiPillar,
   };
-  let iiRemaining = events.iiRemainingAtStart;
-  let iiiRemaining = events.iiiRemainingAtStart;
+  // Remaining funded-pension payments are tracked in monthly periods.
+  // The contract duration itself remains expressed in years.
+  let iiRemaining = events.iiRemainingAtStart * 12;
+  let iiiRemaining = events.iiiRemainingAtStart * 12;
 
   // Funded-pension contract state. Before contract start, balances remain
   // ordinary EUR balances. At contract start, each pillar is normalised to
